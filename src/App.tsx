@@ -12,6 +12,7 @@ import { TermsAndScheduleView } from './components/TermsAndScheduleView';
 import { RewardsAndCertificateView } from './components/RewardsAndCertificateView';
 import { CurriculumAndPdfView } from './components/CurriculumAndPdfView';
 import { TelegramParentReminderCard } from './components/TelegramParentReminderCard';
+import { StudentCompletionAiAgentCard } from './components/StudentCompletionAiAgentCard';
 import {
   PrimaryStudentManagementView,
   PrimaryStudent,
@@ -702,13 +703,39 @@ export default function App() {
 
         {/* TAB 0: PRIMARY SCHOOL STUDENT PRACTICE MANAGEMENT SYSTEM */}
         {activeTab === 'management' && (
-          <PrimaryStudentManagementView
-            students={studentsRoster}
-            activeStudentId={activeStudentId}
-            onSelectActiveStudent={handleSelectActiveStudent}
-            onAddStudent={handleAddStudentToRoster}
-            onAssignClassLesson={handleAssignClassLesson}
-          />
+          <div className="space-y-6">
+            <PrimaryStudentManagementView
+              students={studentsRoster}
+              activeStudentId={activeStudentId}
+              onSelectActiveStudent={handleSelectActiveStudent}
+              onAddStudent={handleAddStudentToRoster}
+              onAssignClassLesson={handleAssignClassLesson}
+            />
+
+            {/* AI Agent Completion Confirmation Card ("ខ្ញុំបានធ្វើហើយ") */}
+            <StudentCompletionAiAgentCard
+              studentId={activeStudentId}
+              studentName={studentName}
+              studentClass={studentClass}
+              grade={selectedGrade}
+              lessonTitle={activeSlide.lessonTitle}
+              solvedCount={solvedCountInDeck}
+              totalSlides={currentSlides.length}
+              totalPoints={totalPoints}
+              streakDays={streakDays}
+              exercisesSummary={currentSlides.map((s) => `${s.categoryLabel}: ${s.question}`)}
+              scratchpadNotes={scratchpadText}
+              onBonusPointsEarned={(bonusPoints, updatedStudents) => {
+                setTotalPoints((prev) => prev + bonusPoints);
+                if (Array.isArray(updatedStudents)) {
+                  setStudentsRoster(updatedStudents as PrimaryStudent[]);
+                }
+                setBannerMessage(
+                  `🤖 AI Agent បានបញ្ជាក់ថា «ខ្ញុំបានធ្វើហើយ» សម្រាប់សិស្ស ${studentName} និងផ្ដល់ជូនរង្វាន់ +${bonusPoints} ពិន្ទុបន្ថែម!`
+                );
+              }}
+            />
+          </div>
         )}
 
         {/* TAB 1: DAILY 10-SLIDE EXERCISE WORKSPACE */}
@@ -1179,6 +1206,30 @@ export default function App() {
                     </div>
                   </div>
                 )}
+
+                {/* AI Agent Student Completion Confirmation ("ខ្ញុំបានធ្វើហើយ") */}
+                <StudentCompletionAiAgentCard
+                  studentId={activeStudentId}
+                  studentName={studentName}
+                  studentClass={studentClass}
+                  grade={selectedGrade}
+                  lessonTitle={activeSlide.lessonTitle}
+                  solvedCount={solvedCountInDeck}
+                  totalSlides={currentSlides.length}
+                  totalPoints={totalPoints}
+                  streakDays={streakDays}
+                  exercisesSummary={currentSlides.map((s) => `${s.categoryLabel}: ${s.question}`)}
+                  scratchpadNotes={scratchpadText}
+                  onBonusPointsEarned={(bonusPoints, updatedStudents) => {
+                    setTotalPoints((prev) => prev + bonusPoints);
+                    if (Array.isArray(updatedStudents)) {
+                      setStudentsRoster(updatedStudents as PrimaryStudent[]);
+                    }
+                    setBannerMessage(
+                      `🤖 AI Agent បានបញ្ជាក់ថា «ខ្ញុំបានធ្វើហើយ» សម្រាប់សិស្ស ${studentName} និងផ្ដល់ជូនរង្វាន់ +${bonusPoints} ពិន្ទុបន្ថែម!`
+                    );
+                  }}
+                />
               </div>
 
               {/* RIGHT ZONE (5 cols): 7:00 PM DAILY ROUTINE, REWARD CHEST & SCRATCHPAD */}

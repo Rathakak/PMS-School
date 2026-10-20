@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { GoogleGenAI, Type } from '@google/genai';
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -6,6 +7,39 @@ import { createServer as createViteServer } from 'vite';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+function getGenAIClient(): GoogleGenAI | null {
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
+  if (!apiKey) return null;
+  return new GoogleGenAI({
+    apiKey,
+    httpOptions: {
+      headers: {
+        'User-Agent': 'aistudio-build',
+      },
+    },
+  });
+}
+
+export interface AiCompletionConfirmationRecord {
+  id: string;
+  timestamp: string;
+  studentName: string;
+  studentClass: string;
+  grade: 5 | 6;
+  lessonTitle: string;
+  studentDeclaration: string;
+  solvedCount: number;
+  totalSlides: number;
+  bonusPointsAwarded: number;
+  verificationBadge: string;
+  agentFeedback: string;
+  quickCheckQuestion: string;
+  parentSummaryMessage: string;
+  telegramShareUrl: string;
+  studentReplyToCheck?: string;
+  agentFollowUpResponse?: string;
+}
 
 export interface TelegramReminderLog {
   id: string;
@@ -485,6 +519,254 @@ app.get('/api/students', (_req, res) => {
       logs: reminderLogs.slice(0, 15),
     });
   });
+
+const aiCompletionConfirmations: AiCompletionConfirmationRecord[] = [
+  {
+    id: 'ai-conf-init-1',
+    timestamp: 'ថ្ងៃនេះ · 19:15',
+    studentName: 'សុខ សុវណ្ណារ៉ា',
+    studentClass: 'ថ្នាក់ទី ៥ ក',
+    grade: 5,
+    lessonTitle: 'មេរៀនទី ១ : ចំនួន និងមធ្យមនព្វន្ត (ថ្នាក់ទី៥)',
+    studentDeclaration: 'ខ្ញុំបានធ្វើហើយ! បានបញ្ចប់លំហាត់ទាំង ១០ ស្លាយនៅម៉ោង ៧:០០ ល្ងាច។',
+    solvedCount: 10,
+    totalSlides: 10,
+    bonusPointsAwarded: 30,
+    verificationBadge: '✓ បានបញ្ជាក់ដោយ AI Agent (១០/១០ ស្លាយ)',
+    agentFeedback:
+      'សូមកោតសរសើរ សិស្ស សុខ សុវណ្ណារ៉ា! អ្នកបានគោរពវិន័យម៉ោង ៧:០០ ល្ងាច និងធ្វើលំហាត់គណិតវិទ្យាទាំង ១០ ស្លាយបានយ៉ាងត្រឹមត្រូវ។ ការចេះគណនាមធ្យមនព្វន្ត និងតម្លៃលេខតាមខ្ទង់ គឺជាមូលដ្ឋានគ្រឹះដ៏រឹងមាំសម្រាប់ថ្នាក់បឋមសិក្សា។',
+    quickCheckQuestion:
+      'សំណួរផ្ទៀងផ្ទាត់ខ្លីពី AI Agent៖ ដើម្បីរកមធ្យមនព្វន្តនៃចំនួន ៣ ចំនួន តើយើងត្រូវធ្វើប្រមាណវិធីអ្វីមុនគេ រួចចែកនឹងប៉ុន្មាន?',
+    parentSummaryMessage:
+      '🤖 [AI Agent បញ្ជាក់ការធ្វើលំហាត់រួច] សិស្សឈ្មោះ សុខ សុវណ្ណារ៉ា (ថ្នាក់ទី ៥ ក) បានបញ្ជាក់ថា «ខ្ញុំបានធ្វើហើយ» និងបានបញ្ចប់លំហាត់គណិតវិទ្យាប្រចាំថ្ងៃ 10/10 ស្លាយ ទទួលបានពិន្ទុបន្ថែម +30 ពិន្ទុ។',
+    telegramShareUrl:
+      'https://t.me/share/url?url=https://aistudio.google.com&text=%F0%9F%A4%96%20AI%20Agent%20%E1%9E%94%E1%9E%89%E1%9F%92%E1%9E%87%E1%9E%B6%E1%9E%80%E1%9F%8B%E1%9E%90%E1%9E%B6%E1%9E%9F%E1%9E%B7%E1%9E%9F%E1%9F%92%E1%9E%9F%E1%9E%94%E1%9E%B6%E1%9E%93%E1%9E%92%E1%9F%92%E1%9E%9C%E1%9E%BE%E1%9E%9B%E1%9F%86%E1%9E%A0%E1%9E%B6%E1%9E%8F%E1%9F%8B%E1%9E%9A%E1%9E%BD%E1%9E%85%E1%9E%A0%E1%9E%BE%E1%9E%99',
+  },
+];
+
+// API: Get all AI Agent student completion confirmations
+app.get('/api/ai-agent/confirmations', (_req, res) => {
+  res.json({
+    confirmations: aiCompletionConfirmations.slice(0, 20),
+  });
+});
+
+// API: Student confirms "ខ្ញុំបានធ្វើហើយ" (I have completed the exercises) to the AI Agent
+app.post('/api/ai-agent/confirm-completion', async (req, res) => {
+  const {
+    studentId,
+    studentName = 'សុខ សុវណ្ណារ៉ា',
+    studentClass = 'ថ្នាក់ទី ៥ ក',
+    grade = 5,
+    lessonTitle = 'លំហាត់គណិតវិទ្យាប្រចាំថ្ងៃ (១០ ស្លាយ)',
+    studentDeclaration = 'ខ្ញុំបានធ្វើហើយ!',
+    solvedCount = 10,
+    totalSlides = 10,
+    totalPoints = 200,
+    streakDays = 3,
+    exercisesSummary = [],
+    scratchpadNotes = '',
+    autoNotifyTelegram = true,
+  } = req.body || {};
+
+  const bonusPointsAwarded = solvedCount >= 10 ? 30 : 15;
+  const nowStr = new Date().toLocaleTimeString('km-KH', {
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+
+  let verificationBadge =
+    solvedCount >= 10
+      ? `✓ AI Agent បានបញ្ជាក់៖ ធ្វើលំហាត់រួចរាល់ពេញលេញ (${solvedCount}/${totalSlides} ស្លាយ)`
+      : `✓ AI Agent បានកត់ត្រា៖ បានធ្វើលំហាត់ (${solvedCount}/${totalSlides} ស្លាយ)`;
+  let agentFeedback = `សូមកោតសរសើរសិស្សឈ្មោះ ${studentName} (${studentClass}) ដែលបានរាយការណ៍បញ្ជាក់ថា «${studentDeclaration}»! អ្នកបានធ្វើលំហាត់បានចំនួន ${solvedCount}/${totalSlides} ស្លាយ ក្នុងមេរៀន «${lessonTitle}» និងទទួលបានពិន្ទុលើកទឹកចិត្តបន្ថែម +${bonusPointsAwarded} ពិន្ទុ។`;
+  let quickCheckQuestion = `សំណួរផ្ទៀងផ្ទាត់ខ្លីពី AI Agent៖ ក្នុងចំណោមលំហាត់ដែលប្អូនទើបតែធ្វើរួចក្នុង «${lessonTitle}» តើប្អូនចាំរូបមន្ត ឬវិធីគណនាមួយណាច្បាស់ជាងគេ?`;
+  let parentSummaryMessage = [
+    `🤖 [AI Agent បញ្ជាក់ការធ្វើលំហាត់រួច - «ខ្ញុំបានធ្វើហើយ»]`,
+    `សិស្សឈ្មោះ៖ ${studentName} (${studentClass} · ថ្នាក់ទី${grade === 5 ? '៥' : '៦'})`,
+    `សេចក្ដីបញ្ជាក់របស់សិស្ស៖ «${studentDeclaration}»`,
+    `មេរៀន៖ ${lessonTitle}`,
+    `លទ្ធផល៖ ធ្វើបាន ${solvedCount}/${totalSlides} ស្លាយ · ទទួលបានរង្វាន់បន្ថែម +${bonusPointsAwarded} ពិន្ទុពី AI Agent`,
+  ].join('\n');
+
+  const ai = getGenAIClient();
+  if (ai) {
+    try {
+      const promptText = [
+        `សិស្សបឋមសិក្សាឈ្មោះ "${studentName}" រៀននៅ "${studentClass}" (ថ្នាក់ទី${grade}) បានចុចបញ្ជាក់ប្រាប់ AI Agent ថា៖ "${studentDeclaration}"។`,
+        `មេរៀនថ្ងៃនេះ៖ "${lessonTitle}"។`,
+        `ចំនួនលំហាត់ស្លាយដែលសិស្សបានធ្វើរួច៖ ${solvedCount} ក្នុងចំណោម ${totalSlides} ស្លាយ។`,
+        Array.isArray(exercisesSummary) && exercisesSummary.length > 0
+          ? `ប្រធានបទលំហាត់ដែលបានធ្វើ៖ ${exercisesSummary.slice(0, 5).join(' | ')}។`
+          : '',
+        scratchpadNotes ? `កំណត់ត្រាគណនារបស់សិស្សលើក្តារខៀនព្រាង៖ "${scratchpadNotes}"។` : '',
+        `សូមដើរតួជា "គ្រូជំនួយការ AI គណិតវិទ្យាបឋមសិក្សា" ឆ្លើយតបជាភាសាខ្មែរឱ្យបានច្បាស់លាស់ កក់ក្ដៅ និងលើកទឹកចិត្តសិស្ស។`,
+      ]
+        .filter(Boolean)
+        .join('\n');
+
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: promptText,
+        config: {
+          systemInstruction:
+            'អ្នកគឺជា AI Agent ពិនិត្យ និងបញ្ជាក់ការធ្វើលំហាត់គណិតវិទ្យាសិស្សបឋមសិក្សា (ថ្នាក់ទី៥ និងថ្នាក់ទី៦) នៅម៉ោង ៧:០០ ល្ងាច។ ឆ្លើយតបជា JSON ជាភាសាខ្មែរ។',
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              verificationBadge: {
+                type: Type.STRING,
+                description:
+                  'Short official verification status badge in Khmer, e.g., ✓ AI Agent បានបញ្ជាក់៖ ធ្វើលំហាត់រួចរាល់ (១០/១០ ស្លាយ)',
+              },
+              agentFeedback: {
+                type: Type.STRING,
+                description:
+                  '2-3 encouraging sentences in Khmer praising the student by name, confirming their "ខ្ញុំបានធ្វើហើយ" report, and highlighting the math concepts practiced.',
+              },
+              quickCheckQuestion: {
+                type: Type.STRING,
+                description:
+                  'One short, friendly oral verification question in Khmer related to the lesson so the student can prove they understood what they completed.',
+              },
+              parentSummaryMessage: {
+                type: Type.STRING,
+                description:
+                  'A clear Khmer Telegram notification message for the parent confirming that the student completed their exercises and verified with the AI Agent.',
+              },
+            },
+            required: [
+              'verificationBadge',
+              'agentFeedback',
+              'quickCheckQuestion',
+              'parentSummaryMessage',
+            ],
+          },
+        },
+      });
+
+      const rawText = response.text?.trim();
+      if (rawText) {
+        const parsed = JSON.parse(rawText);
+        if (parsed.verificationBadge) verificationBadge = parsed.verificationBadge;
+        if (parsed.agentFeedback) agentFeedback = parsed.agentFeedback;
+        if (parsed.quickCheckQuestion) quickCheckQuestion = parsed.quickCheckQuestion;
+        if (parsed.parentSummaryMessage) parentSummaryMessage = parsed.parentSummaryMessage;
+      }
+    } catch (err) {
+      console.error('Gemini AI Agent confirmation error:', err);
+    }
+  }
+
+  const appUrl = process.env.APP_URL || 'https://aistudio.google.com';
+  const telegramShareUrl = `https://t.me/share/url?url=${encodeURIComponent(
+    appUrl
+  )}&text=${encodeURIComponent(parentSummaryMessage)}`;
+
+  const newRecord: AiCompletionConfirmationRecord = {
+    id: `ai-conf-${Date.now()}`,
+    timestamp: `ថ្ងៃនេះ · ${nowStr}`,
+    studentName,
+    studentClass,
+    grade: Number(grade) === 6 ? 6 : 5,
+    lessonTitle,
+    studentDeclaration,
+    solvedCount,
+    totalSlides,
+    bonusPointsAwarded,
+    verificationBadge,
+    agentFeedback,
+    quickCheckQuestion,
+    parentSummaryMessage,
+    telegramShareUrl,
+  };
+
+  aiCompletionConfirmations.unshift(newRecord);
+
+  // Update primaryStudents roster
+  primaryStudents = primaryStudents.map((stu) => {
+    if (stu.id === studentId || stu.name === studentName) {
+      return {
+        ...stu,
+        todaySlidesCompleted: Math.max(stu.todaySlidesCompleted, solvedCount),
+        totalPoints: ( totalPoints || stu.totalPoints ) + bonusPointsAwarded,
+        attended7PmToday: true,
+        lastActiveTime: `ថ្ងៃនេះ · ${nowStr} (បញ្ជាក់រួចជាមួយ AI)`,
+      };
+    }
+    return stu;
+  });
+
+  let telegramLog: TelegramReminderLog | null = null;
+  if (autoNotifyTelegram) {
+    telegramLog = await dispatchTelegramMessage(
+      'completion-report',
+      {
+        studentName,
+        studentClass,
+      },
+      {
+        solvedCount,
+        totalPoints: totalPoints + bonusPointsAwarded,
+        streakDays,
+        lessonTitle,
+      }
+    );
+  }
+
+  res.json({
+    ok: true,
+    record: newRecord,
+    confirmations: aiCompletionConfirmations.slice(0, 20),
+    students: primaryStudents,
+    telegramLog,
+  });
+});
+
+// API: Student replies to the AI Agent's quick verification question
+app.post('/api/ai-agent/reply-check', async (req, res) => {
+  const { confirmationId, studentName, lessonTitle, question, studentReply } = req.body || {};
+
+  let followUpResponse = `ល្អណាស់ ${studentName || 'ប្អូនសិស្ស'}! ការពន្យល់របស់ប្អូនបង្ហាញថាប្អូនពិតជាបានធ្វើលំហាត់ និងយល់ខ្លឹមសារមេរៀន «${lessonTitle || 'គណិតវិទ្យា'}» ដោយខ្លួនឯងពិតប្រាកដមែន។`;
+
+  const ai = getGenAIClient();
+  if (ai && studentReply) {
+    try {
+      const response = await ai.models.generateContent({
+        model: 'gemini-3.8-flash',
+        contents: [
+          `សិស្សឈ្មោះ៖ ${studentName || 'សិស្សបឋមសិក្សា'}`,
+          `មេរៀន៖ ${lessonTitle || 'គណិតវិទ្យា'}`,
+          `សំណួរផ្ទៀងផ្ទាត់របស់ AI Agent៖ ${question || ''}`,
+          `ចម្លើយឆ្លើយតបរបស់សិស្ស៖ "${studentReply}"`,
+          `សូមវាយតម្លៃចម្លើយរបស់សិស្សដោយខ្លី (២ ប្រយោគ) ជាភាសាខ្មែរ ដោយលើកទឹកចិត្ត និងកែតម្រូវដោយទន់ភ្លន់ប្រសិនបើមានចំណុចខ្វះខាត។`,
+        ].join('\n'),
+        config: {
+          systemInstruction:
+            'អ្នកគឺជាគ្រូជំនួយការ AI គណិតវិទ្យាបឋមសិក្សា។ ឆ្លើយតបជាភាសាខ្មែរខ្លីៗ ច្បាស់លាស់ និងលើកទឹកចិត្តសិស្ស។',
+        },
+      });
+      if (response.text?.trim()) {
+        followUpResponse = response.text.trim();
+      }
+    } catch (err) {
+      console.error('Gemini AI Agent reply-check error:', err);
+    }
+  }
+
+  const target = aiCompletionConfirmations.find((c) => c.id === confirmationId);
+  if (target) {
+    target.studentReplyToCheck = studentReply;
+    target.agentFollowUpResponse = followUpResponse;
+  }
+
+  res.json({
+    ok: true,
+    followUpResponse,
+    confirmations: aiCompletionConfirmations.slice(0, 20),
+  });
+});
 
 async function startServer() {
   const PORT = Number(process.env.PORT) || 3000;
