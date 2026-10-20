@@ -312,14 +312,11 @@ async function dispatchTelegramMessage(
   return logItem;
 }
 
-async function startServer() {
-  const app = express();
-  const PORT = 3000;
+const app = express();
+app.use(express.json());
 
-  app.use(express.json());
-
-  // API: Get all primary school students
-  app.get('/api/students', (_req, res) => {
+// API: Get all primary school students
+app.get('/api/students', (_req, res) => {
     res.json({
       students: primaryStudents,
     });
@@ -489,6 +486,9 @@ async function startServer() {
     });
   });
 
+async function startServer() {
+  const PORT = Number(process.env.PORT) || 3000;
+
   // Background check every 30 seconds for 18:45 (6:45 PM - 15 minutes before 7:00 PM)
   setInterval(() => {
     if (!parentConfig.autoRemindEnabled) return;
@@ -519,4 +519,8 @@ async function startServer() {
   });
 }
 
-startServer();
+if (!process.env.VERCEL) {
+  startServer();
+}
+
+export default app;
